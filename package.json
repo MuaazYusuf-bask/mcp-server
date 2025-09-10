@@ -1,0 +1,43 @@
+{
+  "name": "mcp-chatgpt-server",
+  "version": "1.0.0",
+  "description": "MCP Server for ChatGPT Integration with search and fetch capabilities",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch index.ts",
+    "clean": "rm -rf dist",
+    "lint": "eslint **/*.ts",
+    "test": "jest"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "chatgpt",
+    "openai",
+    "vector-store"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "openai": "^4.56.0",
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/express": "^4.17.21",
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.3",
+    "tsx": "^4.16.2",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.12"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
