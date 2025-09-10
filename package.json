@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "description": "MCP Server for ChatGPT Integration with search and fetch capabilities",
   "main": "dist/index.js",
+  "type": "module",
   "pre-commit": [
     "ts.check",
     "build",
     "add-build"
   ],
+  
   "scripts": {
     "build": "rimraf dist && tsc",
     "start": "nodemon src/index.ts",
