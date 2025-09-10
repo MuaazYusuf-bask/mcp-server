@@ -10,9 +10,11 @@
     "add-build"
   ],
   "scripts": {
-    "start": "nodemon src/index.ts",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "rimraf dist && tsc",
-    "ts.check": "tsc --project tsconfig.json",
+    "serve": "node dist/index.js",
+    "ts.check": "tsc --noEmit",
     "add-build": "git add dist",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
