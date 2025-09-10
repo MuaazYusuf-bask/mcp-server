@@ -1,10 +1,11 @@
 {
     "compilerOptions": {
-        "module": "commonjs",
+        "allowJs": true,
         "esModuleInterop": true,
         "allowSyntheticDefaultImports": true,
-        "target": "es6",
+        "target": "ES2017",
         "noImplicitAny": true,
+        "module": "esnext",
         "moduleResolution": "node",
         "sourceMap": true,
         "outDir": "dist",
@@ -13,6 +14,12 @@
             "*": ["node_modules/*"]
         }
     },
-        "include": ["**/*"],
-        "exclude": ["dist"]
+    "ts-node": {
+    "compilerOptions": {
+    "module": "commonjs",
+    "jsx": "react"
+    }
+    },
+    "include": ["**/*"],
+    "exclude": ["dist", "node_modules"]
     }
