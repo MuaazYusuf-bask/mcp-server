@@ -51,9 +51,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const index_1 = require("@modelcontextprotocol/sdk/server/index");
-const sse_1 = require("@modelcontextprotocol/sdk/server/sse");
-const types_1 = require("@modelcontextprotocol/sdk/types");
+const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
+const sse_js_1 = require("@modelcontextprotocol/sdk/server/sse.js");
+const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const openai_1 = __importDefault(require("openai"));
 const express_1 = __importDefault(require("express"));
 const dotenv = __importStar(require("dotenv"));
@@ -191,7 +191,7 @@ function handleFetch(args) {
  */
 function createServer() {
     return __awaiter(this, void 0, void 0, function* () {
-        const server = new index_1.Server({
+        const server = new index_js_1.Server({
             name: "Sample MCP Server",
             version: "1.0.0",
         }, {
@@ -239,13 +239,13 @@ information for analysis and proper citation.`,
             },
         ];
         // Handle list tools request
-        server.setRequestHandler(types_1.ListToolsRequestSchema, () => __awaiter(this, void 0, void 0, function* () {
+        server.setRequestHandler(types_js_1.ListToolsRequestSchema, () => __awaiter(this, void 0, void 0, function* () {
             return {
                 tools,
             };
         }));
         // Handle tool execution
-        server.setRequestHandler(types_1.CallToolRequestSchema, (request) => __awaiter(this, void 0, void 0, function* () {
+        server.setRequestHandler(types_js_1.CallToolRequestSchema, (request) => __awaiter(this, void 0, void 0, function* () {
             const { name, arguments: args } = request.params;
             switch (name) {
                 case "search":
@@ -299,7 +299,7 @@ function main() {
             // Setup SSE endpoint with MCP SDK's SSE transport
             app.get("/sse", (req, res) => __awaiter(this, void 0, void 0, function* () {
                 logger.info("New SSE connection established");
-                const transport = new sse_1.SSEServerTransport("/message", res);
+                const transport = new sse_js_1.SSEServerTransport("/message", res);
                 yield mcpServer.connect(transport);
                 // Handle connection close
                 req.on("close", () => {

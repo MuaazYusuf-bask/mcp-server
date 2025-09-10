@@ -5,13 +5,13 @@
  * for proper protocol handling.
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   Tool,
-} from "@modelcontextprotocol/sdk/types";
+} from "@modelcontextprotocol/sdk/types.js";
 import OpenAI from "openai";
 import express from "express";
 import * as dotenv from "dotenv";
