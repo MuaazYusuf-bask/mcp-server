@@ -14,12 +14,6 @@
             "*": ["node_modules/*"]
         }
     },
-    "ts-node": {
-    "compilerOptions": {
-    "module": "commonjs",
-    "jsx": "react"
-    }
-    },
-    "include": ["**/*"],
-    "exclude": ["dist", "node_modules"]
+        "include": ["**/*"],
+        "exclude": ["dist", "node_modules"]
     }
