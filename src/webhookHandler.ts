@@ -1,4 +1,4 @@
-import express, { Request, Response } from "express";
+import { Request, Response } from "express";
 import crypto from "crypto";
 import { Octokit } from "@octokit/rest";
 import OpenAI from "openai";
