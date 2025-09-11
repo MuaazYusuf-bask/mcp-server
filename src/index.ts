@@ -1,24 +1,19 @@
 import OpenAI from "openai";
 import * as dotenv from "dotenv";
 import z from "zod";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { vectorStoreUpdater } from "./webhookHandler.js";
 
 // Load environment variables
 dotenv.config();
 
+
 // Configure logging
-const logger = {
+export const logger = {
   info: (message: string) =>
     console.log(`[INFO] ${new Date().toISOString()} - ${message}`),
   error: (message: string) =>
@@ -27,10 +22,10 @@ const logger = {
 
 // OpenAI configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-let VECTOR_STORE_ID: string | undefined = process.env.VECTOR_STORE_ID;
+export let VECTOR_STORE_ID: string | undefined = process.env.VECTOR_STORE_ID;
 
 // Initialize OpenAI client
-const openaiClient = OPENAI_API_KEY
+export const openaiClient = OPENAI_API_KEY
   ? new OpenAI({
       apiKey: OPENAI_API_KEY,
     })
@@ -248,92 +243,13 @@ async function createServer() {
     handleFetch
   );
 
-  // Register tool execution handler with safeParse for validation
-  // server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  //   const { name, arguments: args } = request.params;
-  //   if (name === "search") {
-  //     const parsed = searchSchema.safeParse(args);
-  //     if (!parsed.success) {
-  //       return {
-  //         isError: true,
-  //         content: [
-  //           {
-  //             type: "text",
-  //             text: `Invalid arguments for search: ${parsed.error.message}`,
-  //           },
-  //         ],
-  //       };
-  //     }
-  //     // Type assertion is safe here because zod schema ensures required fields
-  //     return await handleSearch(parsed.data as { query: string });
-  //   } else if (name === "fetch") {
-  //     const parsed = fetchSchema.safeParse(args);
-  //     if (!parsed.success) {
-  //       return {
-  //         isError: true,
-  //         content: [
-  //           {
-  //             type: "text",
-  //             text: `Invalid arguments for fetch: ${parsed.error.message}`,
-  //           },
-  //         ],
-  //       };
-  //     }
-  //     // Type assertion is safe here because zod schema ensures required fields
-  //     return await handleFetch(parsed.data as { id: string });
-  //   } else {
-  //     return {
-  //       isError: true,
-  //       content: [
-  //         {
-  //           type: "text",
-  //           text: `Unknown tool: ${name}`,
-  //         },
-  //       ],
-  //     };
-  //   }
-  // });
-
   return server;
 }
 
-/**
- * Main function to start the MCP server with stdio transport
- */
-// async function main() {
-//   try {
-//     // Verify OpenAI client is initialized
-//     if (!openaiClient) {
-//       logger.error(
-//         "OpenAI API key not found. Please set OPENAI_API_KEY environment variable."
-//       );
-//       throw new Error("OpenAI API key is required");
-//     }
-
-//     VECTOR_STORE_ID = await getOrCreateVectorStore(process.env.VECTOR_STORE_ID);
-//     logger.info(`Using vector store: ${VECTOR_STORE_ID}`);
-
-//     // Create MCP server
-//     const server = await createServer();
-//     const transport = new StdioServerTransport();
-//     await server.connect(transport);
-//     logger.info("MCP server running on stdio");
-
-//     // Handle graceful shutdown
-//     process.on("SIGINT", () => {
-//       logger.info("Server stopped by user");
-//       process.exit(0);
-//     });
-//   } catch (error) {
-//     logger.error(`Server error: ${error}`);
-//     process.exit(1);
-//   }
-// }
-
-// await main();
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.raw({ type: "application/json" }));
 
 // Map to store transports by session ID
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
@@ -415,6 +331,12 @@ app.get("/mcp", handleSessionRequest);
 
 // Handle DELETE requests for session termination
 app.delete("/mcp", handleSessionRequest);
+
+// Webhook endpoint for repo updates
+
+app.post('/webhook', (req, res) => vectorStoreUpdater.handleWebhook(req, res))
+app.get('/jobs/:jobId', (req, res) => vectorStoreUpdater.getJobStatus(req, res));
+app.get('/queue/stats', (req, res) => vectorStoreUpdater.getQueueStats(req, res));
 
 app.listen(process.env.PORT || 3000, () => {
   logger.info(`Server listening on port ${process.env.PORT || 3000}`);
