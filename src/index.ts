@@ -1,23 +1,8 @@
-import { z } from "zod";
-/**
- * MCP Server with Native SSE Transport
- *
- * This implementation uses the MCP SDK's built-in SSE transport
- * for proper protocol handling.
- */
-
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  Tool,
-} from "@modelcontextprotocol/sdk/types.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import OpenAI from "openai";
 import express from "express";
 import * as dotenv from "dotenv";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 // Load environment variables
 dotenv.config();
