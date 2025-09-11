@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 import * as dotenv from "dotenv";
 import z from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -151,8 +150,31 @@ async function createServer() {
             .describe("File ID from vector store (file-xxx) or local document ID"),
     });
     // Register tool metadata for listing
-    server.tool("search", `Search for documents using OpenAI Vector Store search.\nThis tool searches through the vector store to find semantically relevant matches. Returns a list of search results with basic information. Use the fetch tool to get complete document content.`, zodToJsonSchema(searchSchema), handleSearch);
-    server.tool("fetch", "Fetch complete document content by ID.", zodToJsonSchema(fetchSchema), handleFetch);
+    server.registerTool("search", {
+        title: "Search",
+        description: `Search for documents using OpenAI Vector Store search.\nThis tool searches through the vector store to find semantically relevant matches. Returns a list of search results with basic information. Use the fetch tool to get complete document content.`,
+        inputSchema: searchSchema.shape,
+        outputSchema: z.object({
+            results: z.array(z.object({
+                id: z.string(),
+                title: z.string(),
+                text: z.string(),
+                url: z.string(),
+            })),
+        }).shape,
+    }, handleSearch);
+    server.registerTool("fetch", {
+        title: "Fetch",
+        description: "Fetch complete document content by ID.",
+        inputSchema: fetchSchema.shape,
+        outputSchema: z.object({
+            id: z.string(),
+            title: z.string(),
+            text: z.string(),
+            url: z.string(),
+            metadata: z.any().nullable(),
+        }).shape,
+    }, handleFetch);
     // Register tool execution handler with safeParse for validation
     // server.setRequestHandler(CallToolRequestSchema, async (request) => {
     //   const { name, arguments: args } = request.params;

@@ -211,17 +211,40 @@ async function createServer() {
   });
 
   // Register tool metadata for listing
-  server.tool(
+  server.registerTool(
     "search",
-    `Search for documents using OpenAI Vector Store search.\nThis tool searches through the vector store to find semantically relevant matches. Returns a list of search results with basic information. Use the fetch tool to get complete document content.`,
-    zodToJsonSchema(searchSchema),
+    {
+      title: "Search",
+      description: `Search for documents using OpenAI Vector Store search.\nThis tool searches through the vector store to find semantically relevant matches. Returns a list of search results with basic information. Use the fetch tool to get complete document content.`,
+      inputSchema: searchSchema.shape,
+      outputSchema: z.object({
+        results: z.array(
+          z.object({
+            id: z.string(),
+            title: z.string(),
+            text: z.string(),
+            url: z.string(),
+          })
+        ),
+      }).shape,
+    },
     handleSearch
   );
 
-  server.tool(
+  server.registerTool(
     "fetch",
-    "Fetch complete document content by ID.",
-    zodToJsonSchema(fetchSchema),
+    {
+      title: "Fetch",
+      description: "Fetch complete document content by ID.",
+      inputSchema: fetchSchema.shape,
+      outputSchema: z.object({
+        id: z.string(),
+        title: z.string(),
+        text: z.string(),
+        url: z.string(),
+        metadata: z.any().nullable(),
+      }).shape,
+    },
     handleFetch
   );
 
