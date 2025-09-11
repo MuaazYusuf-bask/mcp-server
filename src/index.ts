@@ -1,3 +1,4 @@
+import { z } from "zod";
 /**
  * MCP Server with Native SSE Transport
  *
@@ -15,6 +16,8 @@ import {
 import OpenAI from "openai";
 import express from "express";
 import * as dotenv from "dotenv";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 // Load environment variables
 dotenv.config();
@@ -192,83 +195,126 @@ async function handleFetch(args: { id: string }): Promise<{ content: any[] }> {
  * Create and configure the MCP server
  */
 async function createServer() {
-  const server = new Server(
+  //   const server = new Server(
+  //     {
+  //       name: "Sample MCP Server",
+  //       version: "1.0.0",
+  //     },
+  //     {
+  //       capabilities: {
+  //         tools: {},
+  //       },
+  //     }
+  //   );
+
+  //   // Define available tools
+  //   const tools: Tool[] = [
+  //     {
+  //       name: "search",
+  //       description: `Search for documents using OpenAI Vector Store search.
+
+  // This tool searches through the vector store to find semantically relevant matches.
+  // Returns a list of search results with basic information. Use the fetch tool to get
+  // complete document content.`,
+  //       inputSchema: {
+  //         type: "object",
+  //         properties: {
+  //           query: {
+  //             type: "string",
+  //             description:
+  //               "Search query string. Natural language queries work best for semantic search.",
+  //           },
+  //         },
+  //         required: ["query"],
+  //       },
+  //     },
+  //     {
+  //       name: "fetch",
+  //       description: `Retrieve complete document content by ID for detailed
+  // analysis and citation. This tool fetches the full document
+  // content from OpenAI Vector Store. Use this after finding
+  // relevant documents with the search tool to get complete
+  // information for analysis and proper citation.`,
+  //       inputSchema: {
+  //         type: "object",
+  //         properties: {
+  //           id: {
+  //             type: "string",
+  //             description:
+  //               "File ID from vector store (file-xxx) or local document ID",
+  //           },
+  //         },
+  //         required: ["id"],
+  //       },
+  //     },
+  //   ];
+
+  //   // Handle list tools request
+  //   server.setRequestHandler(ListToolsRequestSchema, async () => {
+  //     return {
+  //       tools,
+  //     };
+  //   });
+
+  //   // Handle tool execution
+  //   server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  //     const { name, arguments: args } = request.params;
+
+  //     switch (name) {
+  //       case "search":
+  //         return await handleSearch(args as { query: string });
+
+  //       case "fetch":
+  //         return await handleFetch(args as { id: string });
+
+  //       default:
+  //         throw new Error(`Unknown tool: ${name}`);
+  //     }
+  //   });
+
+  //   return server;
+
+  const server = new McpServer({ name: "company-docs", version: "0.1.0" });
+  server.tool(
+    "search",
+    `Search for documents using OpenAI Vector Store search.
+    This tool searches through the vector store to find semantically relevant matches.
+    Returns a list of search results with basic information. Use the fetch tool to get
+    complete document content.`,
     {
-      name: "Sample MCP Server",
-      version: "1.0.0",
-    },
-    {
-      capabilities: {
-        tools: {},
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Search query string. Natural language queries work best for semantic search.",
+        },
       },
-    }
+      required: ["query"],
+    },
+    handleSearch
   );
 
-  // Define available tools
-  const tools: Tool[] = [
+  server.tool(
+    "fetch",
+    `Retrieve complete document content by ID for detailed
+  analysis and citation. This tool fetches the full document
+  content from OpenAI Vector Store. Use this after finding
+  relevant documents with the search tool to get complete
+  information for analysis and proper citation.`,
     {
-      name: "search",
-      description: `Search for documents using OpenAI Vector Store search.
-
-This tool searches through the vector store to find semantically relevant matches.
-Returns a list of search results with basic information. Use the fetch tool to get
-complete document content.`,
-      inputSchema: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description:
-              "Search query string. Natural language queries work best for semantic search.",
-          },
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description:
+            "File ID from vector store (file-xxx) or local document ID",
         },
-        required: ["query"],
       },
+      required: ["id"],
     },
-    {
-      name: "fetch",
-      description: `Retrieve complete document content by ID for detailed
-analysis and citation. This tool fetches the full document
-content from OpenAI Vector Store. Use this after finding
-relevant documents with the search tool to get complete
-information for analysis and proper citation.`,
-      inputSchema: {
-        type: "object",
-        properties: {
-          id: {
-            type: "string",
-            description:
-              "File ID from vector store (file-xxx) or local document ID",
-          },
-        },
-        required: ["id"],
-      },
-    },
-  ];
-
-  // Handle list tools request
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools,
-    };
-  });
-
-  // Handle tool execution
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-
-    switch (name) {
-      case "search":
-        return await handleSearch(args as { query: string });
-
-      case "fetch":
-        return await handleFetch(args as { id: string });
-
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
-  });
-
+    handleFetch
+  );
   return server;
 }
 
@@ -315,31 +361,33 @@ async function main() {
 
     // Create MCP server
     const mcpServer = await createServer();
+    const transport = new StdioServerTransport();
+    mcpServer.connect(transport);
 
-    // Setup SSE endpoint with MCP SDK's SSE transport
-    app.get("/sse", async (req, res) => {
-      logger.info("New SSE connection established");
+    // // Setup SSE endpoint with MCP SDK's SSE transport
+    // app.get("/sse", async (req, res) => {
+    //   logger.info("New SSE connection established");
 
-      const transport = new SSEServerTransport("/message", res);
-      await mcpServer.connect(transport);
+    //   const transport = new SSEServerTransport("/message", res);
+    //   await mcpServer.connect(transport);
 
-      // Handle connection close
-      req.on("close", () => {
-        logger.info("SSE connection closed");
-        transport.close();
-      });
-    });
+    //   // Handle connection close
+    //   req.on("close", () => {
+    //     logger.info("SSE connection closed");
+    //     transport.close();
+    //   });
+    // });
 
-    // Message endpoint for SSE transport
-    app.post("/message", express.json(), async (req, res) => {
-      // The SSE transport handles this internally
-      // This endpoint receives messages from the client
-      res.status(200).json({ received: true });
-    });
+    // // Message endpoint for SSE transport
+    // app.post("/message", express.json(), async (req, res) => {
+    //   // The SSE transport handles this internally
+    //   // This endpoint receives messages from the client
+    //   res.status(200).json({ received: true });
+    // });
 
     // Start the server
-    app.listen(port, "0.0.0.0", () => {
-      logger.info(`MCP server running on http://0.0.0.0:${port}`);
+    app.listen(port, () => {
+      logger.info(`MCP server running`);
       logger.info("SSE endpoint available at /sse");
       logger.info("Health check available at /health");
     });
@@ -355,4 +403,4 @@ async function main() {
   }
 }
 
-await main()
+await main();
