@@ -274,9 +274,5 @@ async function main() {
         process.exit(1);
     }
 }
-// Run the server
-// ESM entrypoint check
-if (import.meta.url === `file://${process.argv[1]}`) {
-    main();
-}
+await main();
 //# sourceMappingURL=index.js.map

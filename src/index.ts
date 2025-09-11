@@ -355,8 +355,4 @@ async function main() {
   }
 }
 
-// Run the server
-// ESM entrypoint check
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
-}
+await main()
