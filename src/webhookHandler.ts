@@ -7,7 +7,7 @@ import fs from "fs";
 import { promisify } from "util";
 import { EventEmitter } from "events";
 import dotenv from "dotenv";
-import { VECTOR_STORE_ID } from "./index";
+import { VECTOR_STORE_ID } from "./index.js";
 
 dotenv.config();
 
