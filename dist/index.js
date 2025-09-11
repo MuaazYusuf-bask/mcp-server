@@ -1,8 +1,10 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import OpenAI from "openai";
-import express from "express";
 import * as dotenv from "dotenv";
+import z from "zod";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
+import { zodToJsonSchema } from "zod-to-json-schema";
 // Load environment variables
 dotenv.config();
 // Configure logging
@@ -13,20 +15,20 @@ const logger = {
 // OpenAI configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 let VECTOR_STORE_ID;
-async function getOrCreateVectorStore(id) {
-    if (id)
-        return id;
-    const response = await openaiClient.vectorStores.create({ name: id });
-    VECTOR_STORE_ID = response.id;
-    console.log("Created vector store:", VECTOR_STORE_ID);
-    return VECTOR_STORE_ID;
-}
 // Initialize OpenAI client
 const openaiClient = OPENAI_API_KEY
     ? new OpenAI({
         apiKey: OPENAI_API_KEY,
     })
     : null;
+async function getOrCreateVectorStore(id) {
+    if (id)
+        return id;
+    const response = await openaiClient.vectorStores.create({ name: id });
+    VECTOR_STORE_ID = response.id;
+    logger.info("Created vector store: " + VECTOR_STORE_ID);
+    return VECTOR_STORE_ID;
+}
 /**
  * Handle search tool execution
  */
@@ -130,108 +132,94 @@ async function handleFetch(args) {
  * Create and configure the MCP server
  */
 async function createServer() {
-    //   const server = new Server(
-    //     {
-    //       name: "Sample MCP Server",
-    //       version: "1.0.0",
-    //     },
-    //     {
-    //       capabilities: {
-    //         tools: {},
-    //       },
-    //     }
-    //   );
-    //   // Define available tools
-    //   const tools: Tool[] = [
-    //     {
-    //       name: "search",
-    //       description: `Search for documents using OpenAI Vector Store search.
-    // This tool searches through the vector store to find semantically relevant matches.
-    // Returns a list of search results with basic information. Use the fetch tool to get
-    // complete document content.`,
-    //       inputSchema: {
-    //         type: "object",
-    //         properties: {
-    //           query: {
-    //             type: "string",
-    //             description:
-    //               "Search query string. Natural language queries work best for semantic search.",
-    //           },
-    //         },
-    //         required: ["query"],
-    //       },
-    //     },
-    //     {
-    //       name: "fetch",
-    //       description: `Retrieve complete document content by ID for detailed
-    // analysis and citation. This tool fetches the full document
-    // content from OpenAI Vector Store. Use this after finding
-    // relevant documents with the search tool to get complete
-    // information for analysis and proper citation.`,
-    //       inputSchema: {
-    //         type: "object",
-    //         properties: {
-    //           id: {
-    //             type: "string",
-    //             description:
-    //               "File ID from vector store (file-xxx) or local document ID",
-    //           },
-    //         },
-    //         required: ["id"],
-    //       },
-    //     },
-    //   ];
-    //   // Handle list tools request
-    //   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    //     return {
-    //       tools,
-    //     };
-    //   });
-    //   // Handle tool execution
-    //   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    //     const { name, arguments: args } = request.params;
-    //     switch (name) {
-    //       case "search":
-    //         return await handleSearch(args as { query: string });
-    //       case "fetch":
-    //         return await handleFetch(args as { id: string });
-    //       default:
-    //         throw new Error(`Unknown tool: ${name}`);
-    //     }
-    //   });
-    //   return server;
-    const server = new McpServer({ name: "company-docs", version: "0.1.0" });
-    server.tool("search", `Search for documents using OpenAI Vector Store search.
-    This tool searches through the vector store to find semantically relevant matches.
-    Returns a list of search results with basic information. Use the fetch tool to get
-    complete document content.`, {
-        type: "object",
-        properties: {
-            query: {
-                type: "string",
-                description: "Search query string. Natural language queries work best for semantic search.",
-            },
+    const server = new Server({
+        name: "company-docs",
+        version: "1.0.0",
+    }, {
+        capabilities: {
+            tools: {},
         },
-        required: ["query"],
-    }, handleSearch);
-    server.tool("fetch", `Retrieve complete document content by ID for detailed
-  analysis and citation. This tool fetches the full document
-  content from OpenAI Vector Store. Use this after finding
-  relevant documents with the search tool to get complete
-  information for analysis and proper citation.`, {
-        type: "object",
-        properties: {
-            id: {
-                type: "string",
-                description: "File ID from vector store (file-xxx) or local document ID",
-            },
-        },
-        required: ["id"],
-    }, handleFetch);
+    });
+    // Define tool schemas using zod
+    const searchSchema = z.object({
+        query: z
+            .string()
+            .min(2)
+            .describe("Search query string. Natural language queries work best for semantic search."),
+    });
+    const fetchSchema = z.object({
+        id: z
+            .string()
+            .describe("File ID from vector store (file-xxx) or local document ID"),
+    });
+    // Register tool metadata for listing
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+        return {
+            tools: [
+                {
+                    name: "search",
+                    description: `Search for documents using OpenAI Vector Store search.\nThis tool searches through the vector store to find semantically relevant matches. Returns a list of search results with basic information. Use the fetch tool to get complete document content.`,
+                    inputSchema: zodToJsonSchema(searchSchema),
+                },
+                {
+                    name: "fetch",
+                    description: `Retrieve complete document content by ID for detailed analysis and citation. This tool fetches the full document content from OpenAI Vector Store. Use this after finding relevant documents with the search tool to get complete information for analysis and proper citation.`,
+                    inputSchema: zodToJsonSchema(fetchSchema),
+                },
+            ],
+        };
+    });
+    // Register tool execution handler with safeParse for validation
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        const { name, arguments: args } = request.params;
+        if (name === "search") {
+            const parsed = searchSchema.safeParse(args);
+            if (!parsed.success) {
+                return {
+                    isError: true,
+                    content: [
+                        {
+                            type: "text",
+                            text: `Invalid arguments for search: ${parsed.error.message}`,
+                        },
+                    ],
+                };
+            }
+            // Type assertion is safe here because zod schema ensures required fields
+            return await handleSearch(parsed.data);
+        }
+        else if (name === "fetch") {
+            const parsed = fetchSchema.safeParse(args);
+            if (!parsed.success) {
+                return {
+                    isError: true,
+                    content: [
+                        {
+                            type: "text",
+                            text: `Invalid arguments for fetch: ${parsed.error.message}`,
+                        },
+                    ],
+                };
+            }
+            // Type assertion is safe here because zod schema ensures required fields
+            return await handleFetch(parsed.data);
+        }
+        else {
+            return {
+                isError: true,
+                content: [
+                    {
+                        type: "text",
+                        text: `Unknown tool: ${name}`,
+                    },
+                ],
+            };
+        }
+    });
     return server;
 }
 /**
- * Main function to start the MCP server with SSE transport
+ * Main function to start the MCP server with stdio transport
  */
 async function main() {
     try {
@@ -242,55 +230,11 @@ async function main() {
         }
         VECTOR_STORE_ID = await getOrCreateVectorStore(process.env.VECTOR_STORE_ID);
         logger.info(`Using vector store: ${VECTOR_STORE_ID}`);
-        // Create Express app for SSE transport
-        const app = express();
-        const port = parseInt(process.env.PORT || "8000", 10);
-        // Enable CORS
-        app.use((req, res, next) => {
-            res.header("Access-Control-Allow-Origin", process.env.CORS_ORIGIN || "*");
-            res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-            res.header("Access-Control-Allow-Headers", "Content-Type");
-            if (req.method === "OPTIONS") {
-                return res.sendStatus(200);
-            }
-            next();
-        });
-        // Health check endpoint
-        app.get("/health", (req, res) => {
-            res.json({
-                status: "ok",
-                server: "MCP Server",
-                version: "1.0.0",
-                transport: "SSE",
-            });
-        });
         // Create MCP server
-        const mcpServer = await createServer();
+        const server = await createServer();
         const transport = new StdioServerTransport();
-        mcpServer.connect(transport);
-        // // Setup SSE endpoint with MCP SDK's SSE transport
-        // app.get("/sse", async (req, res) => {
-        //   logger.info("New SSE connection established");
-        //   const transport = new SSEServerTransport("/message", res);
-        //   await mcpServer.connect(transport);
-        //   // Handle connection close
-        //   req.on("close", () => {
-        //     logger.info("SSE connection closed");
-        //     transport.close();
-        //   });
-        // });
-        // // Message endpoint for SSE transport
-        // app.post("/message", express.json(), async (req, res) => {
-        //   // The SSE transport handles this internally
-        //   // This endpoint receives messages from the client
-        //   res.status(200).json({ received: true });
-        // });
-        // Start the server
-        app.listen(port, () => {
-            logger.info(`MCP server running`);
-            logger.info("SSE endpoint available at /sse");
-            logger.info("Health check available at /health");
-        });
+        await server.connect(transport);
+        logger.info("MCP server running on stdio");
         // Handle graceful shutdown
         process.on("SIGINT", () => {
             logger.info("Server stopped by user");
