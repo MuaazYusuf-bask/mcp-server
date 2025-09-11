@@ -27,7 +27,7 @@ const logger = {
 
 // OpenAI configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-let VECTOR_STORE_ID: string | undefined;
+let VECTOR_STORE_ID: string | undefined = process.env.VECTOR_STORE_ID;
 
 // Initialize OpenAI client
 const openaiClient = OPENAI_API_KEY
