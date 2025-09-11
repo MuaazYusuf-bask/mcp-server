@@ -1,35 +1,74 @@
-import OpenAI from "openai";
-import * as dotenv from "dotenv";
-import z from "zod";
-import express from "express";
-import { randomUUID } from "node:crypto";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { vectorStoreUpdater } from "./webhookHandler.js";
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.openaiClient = exports.VECTOR_STORE_ID = exports.logger = void 0;
+const openai_1 = __importDefault(require("openai"));
+const dotenv = __importStar(require("dotenv"));
+const zod_1 = __importDefault(require("zod"));
+const express_1 = __importDefault(require("express"));
+const node_crypto_1 = require("node:crypto");
+const streamableHttp_js_1 = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
+const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
+const mcp_js_1 = require("@modelcontextprotocol/sdk/server/mcp.js");
+const webhookHandler_js_1 = require("./webhookHandler.js");
 // Load environment variables
 dotenv.config();
 // Configure logging
-export const logger = {
+exports.logger = {
     info: (message) => console.log(`[INFO] ${new Date().toISOString()} - ${message}`),
     error: (message) => console.error(`[ERROR] ${new Date().toISOString()} - ${message}`),
 };
 // OpenAI configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-export let VECTOR_STORE_ID = process.env.VECTOR_STORE_ID;
+exports.VECTOR_STORE_ID = process.env.VECTOR_STORE_ID;
 // Initialize OpenAI client
-export const openaiClient = OPENAI_API_KEY
-    ? new OpenAI({
+exports.openaiClient = OPENAI_API_KEY
+    ? new openai_1.default({
         apiKey: OPENAI_API_KEY,
     })
     : null;
 async function getOrCreateVectorStore(id) {
     if (id)
         return id;
-    const response = await openaiClient.vectorStores.create({ name: id });
-    VECTOR_STORE_ID = response.id;
-    logger.info("Created vector store: " + VECTOR_STORE_ID);
-    return VECTOR_STORE_ID;
+    const response = await exports.openaiClient.vectorStores.create({ name: id });
+    exports.VECTOR_STORE_ID = response.id;
+    exports.logger.info("Created vector store: " + exports.VECTOR_STORE_ID);
+    return exports.VECTOR_STORE_ID;
 }
 /**
  * Handle search tool execution
@@ -46,14 +85,14 @@ async function handleSearch(args) {
             ],
         };
     }
-    if (!openaiClient) {
-        logger.error("OpenAI client not initialized - API key missing");
+    if (!exports.openaiClient) {
+        exports.logger.error("OpenAI client not initialized - API key missing");
         throw new Error("OpenAI API key is required for vector store search");
     }
     try {
-        logger.info(`Searching ${VECTOR_STORE_ID} for query: '${query}'`);
+        exports.logger.info(`Searching ${exports.VECTOR_STORE_ID} for query: '${query}'`);
         // Search implementation
-        const response = await openaiClient.vectorStores.files.list(VECTOR_STORE_ID, { limit: 20 });
+        const response = await exports.openaiClient.vectorStores.files.list(exports.VECTOR_STORE_ID, { limit: 20 });
         const results = [];
         if (response.data && response.data.length > 0) {
             for (let i = 0; i < response.data.length; i++) {
@@ -67,7 +106,7 @@ async function handleSearch(args) {
                 results.push(result);
             }
         }
-        logger.info(`Vector store search returned ${results.length} results`);
+        exports.logger.info(`Vector store search returned ${results.length} results`);
         return {
             content: [
                 {
@@ -78,7 +117,7 @@ async function handleSearch(args) {
         };
     }
     catch (error) {
-        logger.error(`Search error: ${error}`);
+        exports.logger.error(`Search error: ${error}`);
         throw error;
     }
 }
@@ -90,14 +129,14 @@ async function handleFetch(args) {
     if (!id) {
         throw new Error("Document ID is required");
     }
-    if (!openaiClient) {
-        logger.error("OpenAI client not initialized - API key missing");
+    if (!exports.openaiClient) {
+        exports.logger.error("OpenAI client not initialized - API key missing");
         throw new Error("OpenAI API key is required for vector store file retrieval");
     }
     try {
-        logger.info(`Fetching content from vector store for file ID: ${id}`);
-        const fileInfo = await openaiClient.vectorStores.files.retrieve(VECTOR_STORE_ID, id);
-        const fileContent = await openaiClient.files.content(id);
+        exports.logger.info(`Fetching content from vector store for file ID: ${id}`);
+        const fileInfo = await exports.openaiClient.vectorStores.files.retrieve(exports.VECTOR_STORE_ID, id);
+        const fileContent = await exports.openaiClient.files.content(id);
         let content = "";
         if (typeof fileContent === "string") {
             content = fileContent;
@@ -115,7 +154,7 @@ async function handleFetch(args) {
             url: `https://platform.openai.com/storage/files/${id}`,
             metadata: null,
         };
-        logger.info(`Fetched vector store file: ${id}`);
+        exports.logger.info(`Fetched vector store file: ${id}`);
         return {
             content: [
                 {
@@ -126,7 +165,7 @@ async function handleFetch(args) {
         };
     }
     catch (error) {
-        logger.error(`Fetch error: ${error}`);
+        exports.logger.error(`Fetch error: ${error}`);
         throw error;
     }
 }
@@ -134,19 +173,19 @@ async function handleFetch(args) {
  * Create and configure the MCP server
  */
 async function createServer() {
-    const server = new McpServer({
+    const server = new mcp_js_1.McpServer({
         name: "example-server",
         version: "1.0.0",
     });
     // Define tool schemas using zod
-    const searchSchema = z.object({
-        query: z
+    const searchSchema = zod_1.default.object({
+        query: zod_1.default
             .string()
             .min(2)
             .describe("Search query string. Natural language queries work best for semantic search."),
     });
-    const fetchSchema = z.object({
-        id: z
+    const fetchSchema = zod_1.default.object({
+        id: zod_1.default
             .string()
             .describe("File ID from vector store (file-xxx) or local document ID"),
     });
@@ -155,12 +194,12 @@ async function createServer() {
         title: "Search",
         description: `Search for documents using OpenAI Vector Store search.\nThis tool searches through the vector store to find semantically relevant matches. Returns a list of search results with basic information. Use the fetch tool to get complete document content.`,
         inputSchema: searchSchema.shape,
-        outputSchema: z.object({
-            results: z.array(z.object({
-                id: z.string(),
-                title: z.string(),
-                text: z.string(),
-                url: z.string(),
+        outputSchema: zod_1.default.object({
+            results: zod_1.default.array(zod_1.default.object({
+                id: zod_1.default.string(),
+                title: zod_1.default.string(),
+                text: zod_1.default.string(),
+                url: zod_1.default.string(),
             })),
         }).shape,
     }, handleSearch);
@@ -168,19 +207,19 @@ async function createServer() {
         title: "Fetch",
         description: "Fetch complete document content by ID.",
         inputSchema: fetchSchema.shape,
-        outputSchema: z.object({
-            id: z.string(),
-            title: z.string(),
-            text: z.string(),
-            url: z.string(),
-            metadata: z.any().nullable(),
+        outputSchema: zod_1.default.object({
+            id: zod_1.default.string(),
+            title: zod_1.default.string(),
+            text: zod_1.default.string(),
+            url: zod_1.default.string(),
+            metadata: zod_1.default.any().nullable(),
         }).shape,
     }, handleFetch);
     return server;
 }
-const app = express();
-app.use(express.json({ limit: "10mb" }));
-app.use(express.raw({ type: "application/json" }));
+const app = (0, express_1.default)();
+app.use(express_1.default.json({ limit: "10mb" }));
+app.use(express_1.default.raw({ type: "application/json" }));
 // Map to store transports by session ID
 const transports = {};
 // Handle POST requests for client-to-server communication
@@ -193,10 +232,10 @@ app.post("/mcp", async (req, res) => {
             // Reuse existing transport
             transport = transports[sessionId];
         }
-        else if (!sessionId && isInitializeRequest(req.body)) {
+        else if (!sessionId && (0, types_js_1.isInitializeRequest)(req.body)) {
             // New initialization request
-            transport = new StreamableHTTPServerTransport({
-                sessionIdGenerator: () => randomUUID(),
+            transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
+                sessionIdGenerator: () => (0, node_crypto_1.randomUUID)(),
                 onsessioninitialized: (sessionId) => {
                     // Store the transport by session ID
                     transports[sessionId] = transport;
@@ -232,7 +271,7 @@ app.post("/mcp", async (req, res) => {
         await transport.handleRequest(req, res, req.body);
     }
     catch (error) {
-        logger.error(`Server error: ${error}`);
+        exports.logger.error(`Server error: ${error}`);
         res.status(400).json({
             jsonrpc: "2.0",
         });
@@ -254,10 +293,10 @@ app.get("/mcp", handleSessionRequest);
 // Handle DELETE requests for session termination
 app.delete("/mcp", handleSessionRequest);
 // Webhook endpoint for repo updates
-app.post('/webhook', (req, res) => vectorStoreUpdater.handleWebhook(req, res));
-app.get('/jobs/:jobId', (req, res) => vectorStoreUpdater.getJobStatus(req, res));
-app.get('/queue/stats', (req, res) => vectorStoreUpdater.getQueueStats(req, res));
+app.post('/webhook', (req, res) => webhookHandler_js_1.vectorStoreUpdater.handleWebhook(req, res));
+app.get('/jobs/:jobId', (req, res) => webhookHandler_js_1.vectorStoreUpdater.getJobStatus(req, res));
+app.get('/queue/stats', (req, res) => webhookHandler_js_1.vectorStoreUpdater.getQueueStats(req, res));
 app.listen(process.env.PORT || 3000, () => {
-    logger.info(`Server listening on port ${process.env.PORT || 3000}`);
+    exports.logger.info(`Server listening on port ${process.env.PORT || 3000}`);
 });
 //# sourceMappingURL=index.js.map
