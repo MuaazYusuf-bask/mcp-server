@@ -356,6 +356,7 @@ async function main() {
 }
 
 // Run the server
-if (require.main === module) {
+// ESM entrypoint check
+if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }
