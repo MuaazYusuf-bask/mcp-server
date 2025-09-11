@@ -609,7 +609,7 @@ class OpenAIVectorStoreUpdater {
     }
 }
 const jobQueue = new JobQueue(config.maxConcurrentJobs, config.queueMaxSize);
-const vectorStoreUpdater = new OpenAIVectorStoreUpdater(jobQueue);
+export const vectorStoreUpdater = new OpenAIVectorStoreUpdater(jobQueue);
 // Queue event listeners
 jobQueue.on("jobAdded", (job) => {
     console.log(`📝 Job added: ${job.id} (${job.files.length} files, priority: ${job.priority})`);
@@ -623,4 +623,3 @@ jobQueue.on("jobCompleted", (job, result) => {
 jobQueue.on("jobFailed", (job, error) => {
     console.log(`❌ Job failed: ${job.id} - ${error}`);
 });
-export default vectorStoreUpdater;
