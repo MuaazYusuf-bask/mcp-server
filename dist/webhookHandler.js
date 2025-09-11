@@ -1,18 +1,13 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const crypto_1 = __importDefault(require("crypto"));
-const rest_1 = require("@octokit/rest");
-const openai_1 = __importDefault(require("openai"));
-const path_1 = __importDefault(require("path"));
-const fs_1 = __importDefault(require("fs"));
-const util_1 = require("util");
-const events_1 = require("events");
-const dotenv_1 = __importDefault(require("dotenv"));
-const index_1 = require("./index");
-dotenv_1.default.config();
+import crypto from "crypto";
+import { Octokit } from "@octokit/rest";
+import OpenAI from "openai";
+import path from "path";
+import fs from "fs";
+import { promisify } from "util";
+import { EventEmitter } from "events";
+import dotenv from "dotenv";
+import { VECTOR_STORE_ID } from "./index";
+dotenv.config();
 // Configuration
 const config = {
     githubToken: process.env.GITHUB_TOKEN,
@@ -26,10 +21,10 @@ const config = {
     rateLimitPerMinute: parseInt(process.env.RATE_LIMIT_PER_MINUTE || "20"),
     rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000"), // 1 minute
 };
-const octokit = new rest_1.Octokit({ auth: config.githubToken });
-const openai = new openai_1.default({ apiKey: config.openaiApiKey });
-if (!fs_1.default.existsSync(config.tempDir)) {
-    fs_1.default.mkdirSync(config.tempDir, { recursive: true });
+const octokit = new Octokit({ auth: config.githubToken });
+const openai = new OpenAI({ apiKey: config.openaiApiKey });
+if (!fs.existsSync(config.tempDir)) {
+    fs.mkdirSync(config.tempDir, { recursive: true });
 }
 const SUPPORTED_EXTENSIONS = new Set([
     ".md",
@@ -40,14 +35,16 @@ const SUPPORTED_EXTENSIONS = new Set([
     ".pdf",
     ".docx",
 ]);
-class JobQueue extends events_1.EventEmitter {
+class JobQueue extends EventEmitter {
+    maxConcurrent;
+    maxSize;
+    queue = [];
+    processing = new Set();
+    completed = new Map();
     constructor(maxConcurrent = 3, maxSize = 100) {
         super();
         this.maxConcurrent = maxConcurrent;
         this.maxSize = maxSize;
-        this.queue = [];
-        this.processing = new Set();
-        this.completed = new Map();
         this.processQueue();
     }
     addJob(job) {
@@ -200,8 +197,8 @@ class BatchProcessor {
             const vectorStores = await openai.vectorStores.list();
             const existingStore = vectorStores.data.find((store) => store.name === `repo-${repoFullName.replace("/", "-")}`);
             let vectorStoreId;
-            if (index_1.VECTOR_STORE_ID) {
-                vectorStoreId = index_1.VECTOR_STORE_ID;
+            if (VECTOR_STORE_ID) {
+                vectorStoreId = VECTOR_STORE_ID;
                 console.log(`Using existing vector store: ${vectorStoreId}`);
             }
             else {
@@ -324,7 +321,7 @@ class BatchProcessor {
                     }
                     // Upload new file
                     const uploadedFile = await openai.files.create({
-                        file: fs_1.default.createReadStream(tempPath),
+                        file: fs.createReadStream(tempPath),
                         purpose: "user_data",
                     });
                     // Add to vector store
@@ -377,13 +374,13 @@ class BatchProcessor {
         }
     }
     async createTemporaryFile(filename, content) {
-        const tempFilePath = path_1.default.join(config.tempDir, `${Date.now()}_${Math.random().toString(36)}_${path_1.default.basename(filename)}`);
-        await (0, util_1.promisify)(fs_1.default.writeFile)(tempFilePath, content, "utf-8");
+        const tempFilePath = path.join(config.tempDir, `${Date.now()}_${Math.random().toString(36)}_${path.basename(filename)}`);
+        await promisify(fs.writeFile)(tempFilePath, content, "utf-8");
         return tempFilePath;
     }
     async cleanupTemporaryFile(filePath) {
         try {
-            await (0, util_1.promisify)(fs_1.default.unlink)(filePath);
+            await promisify(fs.unlink)(filePath);
         }
         catch (error) {
             console.error("Error cleaning up temporary file:", error);
@@ -391,18 +388,19 @@ class BatchProcessor {
     }
 }
 class OpenAIVectorStoreUpdater {
+    jobQueue;
     constructor(jobQueue) {
         this.jobQueue = jobQueue;
     }
     verifyGitHubSignature(payload, signature) {
-        const expectedSignature = `sha256=${crypto_1.default
+        const expectedSignature = `sha256=${crypto
             .createHmac("sha256", config.githubWebhookSecret)
             .update(payload)
             .digest("hex")}`;
-        return crypto_1.default.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+        return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
     }
     shouldProcessFile(filename) {
-        const ext = path_1.default.extname(filename).toLowerCase();
+        const ext = path.extname(filename).toLowerCase();
         // Skip certain directories and files
         if (filename.includes("node_modules") ||
             filename.includes(".git") ||
@@ -625,4 +623,4 @@ jobQueue.on("jobCompleted", (job, result) => {
 jobQueue.on("jobFailed", (job, error) => {
     console.log(`❌ Job failed: ${job.id} - ${error}`);
 });
-exports.default = vectorStoreUpdater;
+export default vectorStoreUpdater;
