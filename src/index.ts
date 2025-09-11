@@ -341,3 +341,5 @@ app.get("/queue/stats", (req, res) =>
 app.listen(process.env.PORT || 3000, () => {
   logger.info(`Server listening on port ${process.env.PORT || 3000}`);
 });
+
+export default app;
