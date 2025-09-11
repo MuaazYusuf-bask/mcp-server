@@ -11,7 +11,7 @@ const fs_1 = __importDefault(require("fs"));
 const util_1 = require("util");
 const events_1 = require("events");
 const dotenv_1 = __importDefault(require("dotenv"));
-const index_js_1 = require("./index.js");
+const index_1 = require("./index");
 dotenv_1.default.config();
 // Configuration
 const config = {
@@ -200,8 +200,8 @@ class BatchProcessor {
             const vectorStores = await openai.vectorStores.list();
             const existingStore = vectorStores.data.find((store) => store.name === `repo-${repoFullName.replace("/", "-")}`);
             let vectorStoreId;
-            if (index_js_1.VECTOR_STORE_ID) {
-                vectorStoreId = index_js_1.VECTOR_STORE_ID;
+            if (index_1.VECTOR_STORE_ID) {
+                vectorStoreId = index_1.VECTOR_STORE_ID;
                 console.log(`Using existing vector store: ${vectorStoreId}`);
             }
             else {
@@ -477,7 +477,8 @@ class OpenAIVectorStoreUpdater {
             const contentPromises = supportedFiles
                 .filter((file) => file.status !== "removed")
                 .map(async (file) => {
-                file.content = await this.getFileContent(owner, repo, file.filename, after);
+                const content = await this.getFileContent(owner, repo, file.filename, after);
+                file.content = content === null ? undefined : content;
                 return file;
             });
             // Process in batches to avoid overwhelming GitHub API
@@ -625,4 +626,3 @@ jobQueue.on("jobFailed", (job, error) => {
     console.log(`❌ Job failed: ${job.id} - ${error}`);
 });
 exports.default = vectorStoreUpdater;
-//# sourceMappingURL=webhookHandler.js.map

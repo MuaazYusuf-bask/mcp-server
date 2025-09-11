@@ -55,13 +55,11 @@ exports.logger = {
 };
 // OpenAI configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-exports.VECTOR_STORE_ID = process.env.VECTOR_STORE_ID;
+exports.VECTOR_STORE_ID = process.env.VECTOR_STORE_ID || "";
 // Initialize OpenAI client
-exports.openaiClient = OPENAI_API_KEY
-    ? new openai_1.default({
-        apiKey: OPENAI_API_KEY,
-    })
-    : null;
+exports.openaiClient = new openai_1.default({
+    apiKey: OPENAI_API_KEY,
+});
 async function getOrCreateVectorStore(id) {
     if (id)
         return id;
@@ -293,10 +291,9 @@ app.get("/mcp", handleSessionRequest);
 // Handle DELETE requests for session termination
 app.delete("/mcp", handleSessionRequest);
 // Webhook endpoint for repo updates
-app.post('/webhook', (req, res) => webhookHandler_1.default.handleWebhook(req, res));
-app.get('/jobs/:jobId', (req, res) => webhookHandler_1.default.getJobStatus(req, res));
-app.get('/queue/stats', (req, res) => webhookHandler_1.default.getQueueStats(req, res));
+app.post("/webhook", (req, res) => webhookHandler_1.default.handleWebhook(req, res));
+app.get("/jobs/:jobId", (req, res) => webhookHandler_1.default.getJobStatus(req, res));
+app.get("/queue/stats", (req, res) => webhookHandler_1.default.getQueueStats(req, res));
 app.listen(process.env.PORT || 3000, () => {
     exports.logger.info(`Server listening on port ${process.env.PORT || 3000}`);
 });
-//# sourceMappingURL=index.js.map

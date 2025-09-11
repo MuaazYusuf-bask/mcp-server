@@ -11,7 +11,6 @@ import vectorStoreUpdater from "./webhookHandler";
 // Load environment variables
 dotenv.config();
 
-
 // Configure logging
 export const logger = {
   info: (message: string) =>
@@ -22,14 +21,12 @@ export const logger = {
 
 // OpenAI configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-export let VECTOR_STORE_ID: string | undefined = process.env.VECTOR_STORE_ID;
+export let VECTOR_STORE_ID: string = process.env.VECTOR_STORE_ID || "";
 
 // Initialize OpenAI client
-export const openaiClient = OPENAI_API_KEY
-  ? new OpenAI({
-      apiKey: OPENAI_API_KEY,
-    })
-  : null;
+export const openaiClient = new OpenAI({
+  apiKey: OPENAI_API_KEY,
+});
 
 async function getOrCreateVectorStore(id: string) {
   if (id) return id;
@@ -246,7 +243,6 @@ async function createServer() {
   return server;
 }
 
-
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(express.raw({ type: "application/json" }));
@@ -334,9 +330,13 @@ app.delete("/mcp", handleSessionRequest);
 
 // Webhook endpoint for repo updates
 
-app.post('/webhook', (req, res) => vectorStoreUpdater.handleWebhook(req, res))
-app.get('/jobs/:jobId', (req, res) => vectorStoreUpdater.getJobStatus(req, res));
-app.get('/queue/stats', (req, res) => vectorStoreUpdater.getQueueStats(req, res));
+app.post("/webhook", (req, res) => vectorStoreUpdater.handleWebhook(req, res));
+app.get("/jobs/:jobId", (req, res) =>
+  vectorStoreUpdater.getJobStatus(req, res)
+);
+app.get("/queue/stats", (req, res) =>
+  vectorStoreUpdater.getQueueStats(req, res)
+);
 
 app.listen(process.env.PORT || 3000, () => {
   logger.info(`Server listening on port ${process.env.PORT || 3000}`);

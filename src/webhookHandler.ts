@@ -7,7 +7,7 @@ import fs from "fs";
 import { promisify } from "util";
 import { EventEmitter } from "events";
 import dotenv from "dotenv";
-import { VECTOR_STORE_ID } from "./index.js";
+import { VECTOR_STORE_ID } from "./index";
 
 dotenv.config();
 
@@ -676,12 +676,13 @@ class OpenAIVectorStoreUpdater {
       const contentPromises = supportedFiles
         .filter((file) => file.status !== "removed")
         .map(async (file) => {
-          file.content = await this.getFileContent(
+          const content = await this.getFileContent(
             owner,
             repo,
             file.filename,
             after
           );
+          file.content = content === null ? undefined : content;
           return file;
         });
 
