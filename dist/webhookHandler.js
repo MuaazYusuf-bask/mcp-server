@@ -3,7 +3,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.vectorStoreUpdater = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const rest_1 = require("@octokit/rest");
 const openai_1 = __importDefault(require("openai"));
@@ -611,7 +610,7 @@ class OpenAIVectorStoreUpdater {
     }
 }
 const jobQueue = new JobQueue(config.maxConcurrentJobs, config.queueMaxSize);
-exports.vectorStoreUpdater = new OpenAIVectorStoreUpdater(jobQueue);
+const vectorStoreUpdater = new OpenAIVectorStoreUpdater(jobQueue);
 // Queue event listeners
 jobQueue.on("jobAdded", (job) => {
     console.log(`📝 Job added: ${job.id} (${job.files.length} files, priority: ${job.priority})`);
@@ -625,4 +624,5 @@ jobQueue.on("jobCompleted", (job, result) => {
 jobQueue.on("jobFailed", (job, error) => {
     console.log(`❌ Job failed: ${job.id} - ${error}`);
 });
+exports.default = vectorStoreUpdater;
 //# sourceMappingURL=webhookHandler.js.map

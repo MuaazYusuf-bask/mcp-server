@@ -45,7 +45,7 @@ const node_crypto_1 = require("node:crypto");
 const streamableHttp_js_1 = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const mcp_js_1 = require("@modelcontextprotocol/sdk/server/mcp.js");
-const webhookHandler_1 = require("./webhookHandler");
+const webhookHandler_1 = __importDefault(require("./webhookHandler"));
 // Load environment variables
 dotenv.config();
 // Configure logging
@@ -293,9 +293,9 @@ app.get("/mcp", handleSessionRequest);
 // Handle DELETE requests for session termination
 app.delete("/mcp", handleSessionRequest);
 // Webhook endpoint for repo updates
-app.post('/webhook', (req, res) => webhookHandler_1.vectorStoreUpdater.handleWebhook(req, res));
-app.get('/jobs/:jobId', (req, res) => webhookHandler_1.vectorStoreUpdater.getJobStatus(req, res));
-app.get('/queue/stats', (req, res) => webhookHandler_1.vectorStoreUpdater.getQueueStats(req, res));
+app.post('/webhook', (req, res) => webhookHandler_1.default.handleWebhook(req, res));
+app.get('/jobs/:jobId', (req, res) => webhookHandler_1.default.getJobStatus(req, res));
+app.get('/queue/stats', (req, res) => webhookHandler_1.default.getQueueStats(req, res));
 app.listen(process.env.PORT || 3000, () => {
     exports.logger.info(`Server listening on port ${process.env.PORT || 3000}`);
 });
