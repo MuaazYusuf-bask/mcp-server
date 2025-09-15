@@ -11,7 +11,7 @@ import helmet from "helmet";
 import cors from "cors";
 
 dotenv.config();
-
+const API_KEY = process.env.API_KEY;
 export const logger = {
   info: (message: string, meta?: any) => {
     if (meta) {
@@ -296,46 +296,40 @@ async function createServer() {
   return server;
 }
 
-function authMiddleware(
+const app = express();
+
+function mcpAuthMiddleware(
   req: express.Request,
   res: express.Response,
   next: express.NextFunction
 ) {
-  const authHeader = req.headers["authorization"];
-  console.log("Request Headers:", req.headers);
-  console.log("Auth Header:", authHeader);
-  if (!API_KEY || !authHeader || authHeader !== `Bearer ${API_KEY}`) {
-    return res.status(401).json({ error: "Unauthorized" });
+  const protocolVersion = req.headers["mcp-protocol-version"];
+  if (!protocolVersion || protocolVersion !== "2025-06-18") {
+    return res
+      .status(400)
+      .json({ error: "Missing or invalid MCP-Protocol-Version header" });
   }
+
+  const authHeader = req.headers["authorization"];
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res
+      .status(401)
+      .json({ error: "Missing or invalid Authorization header" });
+  }
+  const token = authHeader.replace("Bearer ", "").trim();
+
+  if (!token || token !== API_KEY) {
+    return res.status(401).json({ error: "Invalid or missing access token" });
+  }
+  (req as any).accessToken = token;
   next();
 }
-
-const app = express();
-// app.use(helmet());
-// app.use(
-//   cors({
-//     origin: process.env.CORS_ORIGIN || "*",
-//     methods: ["GET", "POST", "DELETE"],
-//     allowedHeaders: [
-//       "Content-Type",
-//       "Authorization",
-//       "MCP-Session-Id",
-//       "mcp-session-id",
-//     ],
-//     credentials: false,
-//   })
-// );
-// app.disable("x-powered-by");
-// app.use(express.json({ limit: "10mb" }));
-// app.use(express.raw({ type: "application/json" }));
-
-const API_KEY = process.env.API_KEY;
 
 // Map to store transports by session ID
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
-// Handle POST requests for client-to-server communication
-app.post("/mcp", async (req, res) => {
+// Handle POST requests for client-to-server communication (with MCP OAuth middleware)
+app.post("/mcp", mcpAuthMiddleware, async (req, res) => {
   try {
     // Check for existing session ID
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
@@ -407,10 +401,10 @@ const handleSessionRequest = async (
 };
 
 // Handle GET requests for server-to-client notifications via SSE
-app.get("/mcp", handleSessionRequest);
+app.get("/mcp", mcpAuthMiddleware, handleSessionRequest);
 
 // Handle DELETE requests for session termination
-app.delete("/mcp", handleSessionRequest);
+app.delete("/mcp", mcpAuthMiddleware, handleSessionRequest);
 
 // Webhook endpoint for repo updates
 
