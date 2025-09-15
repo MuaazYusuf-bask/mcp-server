@@ -8,6 +8,7 @@ import { EventEmitter } from "events";
 import dotenv from "dotenv";
 import { VECTOR_STORE_ID } from "./index.js";
 dotenv.config();
+let encoder = new TextEncoder();
 // Configuration
 const config = {
     githubToken: process.env.GITHUB_TOKEN,
@@ -26,7 +27,7 @@ const openai = new OpenAI({ apiKey: config.openaiApiKey });
 if (!fs.existsSync(config.tempDir)) {
     fs.mkdirSync(config.tempDir, { recursive: true });
 }
-const SUPPORTED_EXTENSIONS = new Set([
+export const SUPPORTED_EXTENSIONS = new Set([
     ".md",
     ".txt",
     ".json",
@@ -158,7 +159,7 @@ class JobQueue extends EventEmitter {
         };
     }
 }
-class BatchProcessor {
+export class BatchProcessor {
     async processFileBatch(repository, files) {
         const batchId = `batch_${Date.now()}_${Math.random()
             .toString(36)
@@ -305,21 +306,22 @@ class BatchProcessor {
         // Create temporary files and upload in batches
         const tempFiles = [];
         try {
-            // Create all temporary files
+            // Create all temporary files with encoded filenames
             for (const file of files) {
                 if (file.content) {
-                    const tempPath = await this.createTemporaryFile(file.filename, file.content);
-                    tempFiles.push({ filename: file.filename, tempPath, file });
+                    const encodedFilename = file.filename.replace(/[\/\\]/g, "_");
+                    const tempPath = await this.createTemporaryFile(encodedFilename, file.content);
+                    tempFiles.push({ encodedFilename: encodedFilename, tempPath, file });
                 }
             }
             // Upload files in batches using OpenAI batch upload
-            const uploadPromises = tempFiles.map(async ({ filename, tempPath, file }) => {
+            const uploadPromises = tempFiles.map(async ({ encodedFilename, tempPath, file }) => {
                 try {
                     // For modified files, remove existing version first
                     if (file.status === "modified") {
-                        await this.removeExistingFile(vectorStoreId, filename);
+                        await this.removeExistingFile(vectorStoreId, encodedFilename);
                     }
-                    // Upload new file
+                    // Upload new file (filename is taken from the temp file's name)
                     const uploadedFile = await openai.files.create({
                         file: fs.createReadStream(tempPath),
                         purpose: "user_data",
@@ -328,13 +330,13 @@ class BatchProcessor {
                     await openai.vectorStores.files.create(vectorStoreId, {
                         file_id: uploadedFile.id,
                     });
-                    results.push({ filename, status: "success" });
-                    console.log(`Processed: ${filename} (${file.status})`);
+                    results.push({ filename: encodedFilename, status: "success" });
+                    console.log(`Processed: ${encodedFilename} (${file.status})`);
                 }
                 catch (error) {
-                    console.error(`Error processing ${filename}:`, error);
+                    console.error(`Error processing ${encodedFilename}:`, error);
                     results.push({
-                        filename,
+                        filename: encodedFilename,
                         status: "failed",
                         error: error instanceof Error ? error.message : "Unknown error",
                     });
@@ -357,12 +359,12 @@ class BatchProcessor {
             await Promise.allSettled(cleanupPromises);
         }
     }
-    async removeExistingFile(vectorStoreId, filename) {
+    async removeExistingFile(vectorStoreId, encodedFilename) {
         try {
             const files = await openai.vectorStores.files.list(vectorStoreId);
             for (const file of files.data) {
                 const fileDetails = await openai.files.retrieve(file.id);
-                if (fileDetails.filename === filename) {
+                if (fileDetails.filename === encodedFilename) {
                     await openai.vectorStores.files.del(vectorStoreId, file.id);
                     await openai.files.del(file.id);
                     break;
@@ -370,11 +372,11 @@ class BatchProcessor {
             }
         }
         catch (error) {
-            console.error(`Error removing existing file ${filename}:`, error);
+            console.error(`Error removing existing file ${encodedFilename}:`, error);
         }
     }
     async createTemporaryFile(filename, content) {
-        const tempFilePath = path.join(config.tempDir, `${Date.now()}_${Math.random().toString(36)}_${path.basename(filename)}`);
+        const tempFilePath = path.join(config.tempDir, `${path.basename(filename)}`);
         await promisify(fs.writeFile)(tempFilePath, content, "utf-8");
         return tempFilePath;
     }
@@ -392,12 +394,29 @@ class OpenAIVectorStoreUpdater {
     constructor(jobQueue) {
         this.jobQueue = jobQueue;
     }
-    verifyGitHubSignature(payload, signature) {
-        const expectedSignature = `sha256=${crypto
-            .createHmac("sha256", config.githubWebhookSecret)
-            .update(payload)
-            .digest("hex")}`;
-        return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+    async verifySignature(secret, header, payload) {
+        let parts = header.split("=");
+        let sigHex = parts[1];
+        let algorithm = { name: "HMAC", hash: { name: "SHA-256" } };
+        let keyBytes = encoder.encode(secret);
+        let extractable = false;
+        let key = await crypto.subtle.importKey("raw", keyBytes, algorithm, extractable, ["sign", "verify"]);
+        let sigBytes = this.hexToBytes(sigHex);
+        let dataBytes = encoder.encode(payload);
+        let equal = await crypto.subtle.verify(algorithm.name, key, sigBytes, dataBytes);
+        return equal;
+    }
+    hexToBytes(hex) {
+        let len = hex.length / 2;
+        let bytes = new Uint8Array(len);
+        let index = 0;
+        for (let i = 0; i < hex.length; i += 2) {
+            let c = hex.slice(i, i + 2);
+            let b = parseInt(c, 16);
+            bytes[index] = b;
+            index += 1;
+        }
+        return bytes;
     }
     shouldProcessFile(filename) {
         const ext = path.extname(filename).toLowerCase();
@@ -513,23 +532,21 @@ class OpenAIVectorStoreUpdater {
     async handleWebhook(req, res) {
         try {
             const signature = req.headers["x-hub-signature-256"];
-            const payload = JSON.stringify(req.body);
+            const payload = JSON.stringify(req.body.payload);
             const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+            res.status(202).send("Accepted");
             // Verify GitHub signature
-            if (!this.verifyGitHubSignature(payload, signature)) {
-                res.status(401).json({ error: "Invalid signature" });
+            if (!this.verifySignature(config.githubWebhookSecret, signature, payload)) {
+                console.warn(`Invalid signature from IP: ${clientIp}`);
                 return;
             }
-            console.log(`Received req.body ${JSON.stringify(req.body)}`);
-            const webhookPayload = req.body;
+            const webhookPayload = JSON.parse(req.body.payload);
             // Only process master branch changes
             if (webhookPayload.ref && !webhookPayload.ref.endsWith("/master")) {
-                res.status(200).json({ message: "Ignored: Not master branch" });
                 return;
             }
             // Only process merged PRs or push events
             if (webhookPayload.pull_request && !webhookPayload.pull_request.merged) {
-                res.status(200).json({ message: "Ignored: PR not merged" });
                 return;
             }
             console.log(`Processing webhook for repository: ${webhookPayload.repository.full_name}`);
@@ -537,7 +554,6 @@ class OpenAIVectorStoreUpdater {
             const changedFiles = await this.getChangedFiles(webhookPayload);
             console.log(`Found ${changedFiles.length} changed supported files`);
             if (changedFiles.length === 0) {
-                res.status(200).json({ message: "No supported files changed" });
                 return;
             }
             // Add job to queue
@@ -547,28 +563,9 @@ class OpenAIVectorStoreUpdater {
                 files: changedFiles,
                 priority,
             });
-            res.status(202).json({
-                message: "Job queued for processing",
-                jobId,
-                filesCount: changedFiles.length,
-                priority,
-                queueStats: this.jobQueue.getQueueStats(),
-            });
         }
         catch (error) {
             console.error("Webhook processing error:", error);
-            if (error instanceof Error &&
-                error.message.includes("Queue is at maximum capacity")) {
-                res
-                    .status(503)
-                    .json({ error: "Service temporarily unavailable - queue full" });
-            }
-            else {
-                res.status(500).json({
-                    error: "Internal server error",
-                    details: error instanceof Error ? error.message : "Unknown error",
-                });
-            }
         }
     }
     async getJobStatus(req, res) {

@@ -7,17 +7,38 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { vectorStoreUpdater } from "./webhookHandler.js";
-// Load environment variables
+import helmet from "helmet";
+import cors from "cors";
 dotenv.config();
-// Configure logging
 export const logger = {
-    info: (message) => console.log(`[INFO] ${new Date().toISOString()} - ${message}`),
-    error: (message) => console.error(`[ERROR] ${new Date().toISOString()} - ${message}`),
+    info: (message, meta) => {
+        if (meta) {
+            console.log(`[INFO] ${new Date().toISOString()} - ${message}`, meta);
+        }
+        else {
+            console.log(`[INFO] ${new Date().toISOString()} - ${message}`);
+        }
+    },
+    error: (message, meta) => {
+        if (meta) {
+            console.error(`[ERROR] ${new Date().toISOString()} - ${message}`, meta);
+        }
+        else {
+            console.error(`[ERROR] ${new Date().toISOString()} - ${message}`);
+        }
+    },
+    warn: (message, meta) => {
+        if (meta) {
+            console.warn(`[WARN] ${new Date().toISOString()} - ${message}`, meta);
+        }
+        else {
+            console.warn(`[WARN] ${new Date().toISOString()} - ${message}`);
+        }
+    },
 };
 // OpenAI configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 export let VECTOR_STORE_ID = process.env.VECTOR_STORE_ID || "";
-// Initialize OpenAI client
 export const openaiClient = new OpenAI({
     apiKey: OPENAI_API_KEY,
 });
@@ -51,19 +72,41 @@ async function handleSearch(args) {
     try {
         logger.info(`Searching ${VECTOR_STORE_ID} for query: '${query}'`);
         // Search implementation
-        const response = await openaiClient.vectorStores.files.list(VECTOR_STORE_ID, { limit: 20 });
+        const response = await openaiClient.vectorStores.search(VECTOR_STORE_ID, {
+            query,
+            rewrite_query: true,
+        });
         const results = [];
-        if (response.data && response.data.length > 0) {
-            for (let i = 0; i < response.data.length; i++) {
-                const item = response.data[i];
-                const result = {
-                    id: item.id || `vs_${i}`,
-                    title: `Document ${i + 1}`,
-                    text: "Document snippet...",
-                    url: `https://platform.openai.com/storage/files/${item.id}`,
-                };
-                results.push(result);
+        for (let i = 0; i < response.data.length; i++) {
+            const item = response.data[i];
+            // Extract text content from the content array
+            const contentList = item.content || [];
+            let textContent = "";
+            if (contentList && contentList.length > 0) {
+                const firstContent = contentList[0];
+                if (typeof firstContent === "object" && firstContent !== null) {
+                    if ("text" in firstContent) {
+                        textContent = firstContent.text;
+                    }
+                    else if (typeof firstContent === "object") {
+                        textContent = firstContent.text || "";
+                    }
+                }
             }
+            if (!textContent) {
+                textContent = "No content available";
+            }
+            // Create a snippet from content
+            const textSnippet = textContent.length > 200
+                ? textContent.slice(0, 200) + "..."
+                : textContent;
+            const result = {
+                id: item.file_id || `vs_${i}`,
+                title: item.filename || `Document ${i + 1}`,
+                text: textSnippet,
+                url: `https://platform.openai.com/storage/files/${item.file_id}`,
+            };
+            results.push(result);
         }
         logger.info(`Vector store search returned ${results.length} results`);
         return {
@@ -76,7 +119,7 @@ async function handleSearch(args) {
         };
     }
     catch (error) {
-        logger.error(`Search error: ${error}`);
+        logger.error(`Search error: ${error}`, { query });
         throw error;
     }
 }
@@ -97,7 +140,19 @@ async function handleFetch(args) {
         const fileInfo = await openaiClient.vectorStores.files.retrieve(VECTOR_STORE_ID, id);
         const fileContent = await openaiClient.files.content(id);
         let content = "";
-        if (typeof fileContent === "string") {
+        // If fileContent is an array (paginated/chunked), concatenate all text fields
+        if (Array.isArray(fileContent) && fileContent.length > 0) {
+            const contentParts = [];
+            for (const contentItem of fileContent) {
+                if (typeof contentItem === "object" &&
+                    contentItem !== null &&
+                    "text" in contentItem) {
+                    contentParts.push(contentItem.text);
+                }
+            }
+            content = contentParts.join("\n");
+        }
+        else if (typeof fileContent === "string") {
             content = fileContent;
         }
         else if (Buffer.isBuffer(fileContent)) {
@@ -106,12 +161,18 @@ async function handleFetch(args) {
         else {
             content = "No content available";
         }
+        // Use filename as title if available
+        const filename = fileInfo && fileInfo.filename
+            ? fileInfo.filename
+            : `Document ${id}`;
         const result = {
             id: id,
-            title: `Document ${id}`,
+            title: filename,
             text: content,
             url: `https://platform.openai.com/storage/files/${id}`,
-            metadata: null,
+            metadata: fileInfo && fileInfo.attributes
+                ? fileInfo.attributes
+                : null,
         };
         logger.info(`Fetched vector store file: ${id}`);
         return {
@@ -124,7 +185,7 @@ async function handleFetch(args) {
         };
     }
     catch (error) {
-        logger.error(`Fetch error: ${error}`);
+        logger.error(`Fetch error: ${error}`, { id });
         throw error;
     }
 }
@@ -136,7 +197,6 @@ async function createServer() {
         name: "example-server",
         version: "1.0.0",
     });
-    // Define tool schemas using zod
     const searchSchema = z.object({
         query: z
             .string()
@@ -148,7 +208,6 @@ async function createServer() {
             .string()
             .describe("File ID from vector store (file-xxx) or local document ID"),
     });
-    // Register tool metadata for listing
     server.registerTool("search", {
         title: "Search",
         description: `Search for documents using OpenAI Vector Store search.\nThis tool searches through the vector store to find semantically relevant matches. Returns a list of search results with basic information. Use the fetch tool to get complete document content.`,
@@ -176,13 +235,34 @@ async function createServer() {
     }, handleFetch);
     return server;
 }
+function authMiddleware(req, res, next) {
+    const authHeader = req.headers["authorization"];
+    if (!API_KEY || !authHeader || authHeader !== `Bearer ${API_KEY}`) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    next();
+}
 const app = express();
+app.use(helmet());
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || "*",
+    methods: ["GET", "POST", "DELETE"],
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "MCP-Session-Id",
+        "mcp-session-id",
+    ],
+    credentials: false,
+}));
+app.disable("x-powered-by");
 app.use(express.json({ limit: "10mb" }));
 app.use(express.raw({ type: "application/json" }));
+const API_KEY = process.env.API_KEY;
 // Map to store transports by session ID
 const transports = {};
 // Handle POST requests for client-to-server communication
-app.post("/mcp", async (req, res) => {
+app.post("/mcp", authMiddleware, async (req, res) => {
     try {
         // Check for existing session ID
         const sessionId = req.headers["mcp-session-id"];
@@ -199,10 +279,6 @@ app.post("/mcp", async (req, res) => {
                     // Store the transport by session ID
                     transports[sessionId] = transport;
                 },
-                // DNS rebinding protection is disabled by default for backwards compatibility. If you are running this server
-                // locally, make sure to set:
-                // enableDnsRebindingProtection: true,
-                // allowedHosts: ['127.0.0.1'],
             });
             // Clean up transport when closed
             transport.onclose = () => {
@@ -230,7 +306,11 @@ app.post("/mcp", async (req, res) => {
         await transport.handleRequest(req, res, req.body);
     }
     catch (error) {
-        logger.error(`Server error: ${error}`);
+        logger.error(`Server error: ${error}`, {
+            url: req.url,
+            method: req.method,
+            ip: req.ip,
+        });
         res.status(400).json({
             jsonrpc: "2.0",
         });
@@ -248,11 +328,11 @@ const handleSessionRequest = async (req, res) => {
     await transport.handleRequest(req, res);
 };
 // Handle GET requests for server-to-client notifications via SSE
-app.get("/mcp", handleSessionRequest);
+app.get("/mcp", authMiddleware, handleSessionRequest);
 // Handle DELETE requests for session termination
-app.delete("/mcp", handleSessionRequest);
+app.delete("/mcp", authMiddleware, handleSessionRequest);
 // Webhook endpoint for repo updates
-app.post("/webhook", (req, res) => vectorStoreUpdater.handleWebhook(req, res));
+app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => vectorStoreUpdater.handleWebhook(req, res));
 app.get("/jobs/:jobId", (req, res) => vectorStoreUpdater.getJobStatus(req, res));
 app.get("/queue/stats", (req, res) => vectorStoreUpdater.getQueueStats(req, res));
 app.listen(process.env.PORT || 3000, () => {
