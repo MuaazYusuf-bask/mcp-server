@@ -335,7 +335,7 @@ const API_KEY = process.env.API_KEY;
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
 // Handle POST requests for client-to-server communication
-app.post("/mcp", authMiddleware, async (req, res) => {
+app.post("/mcp", async (req, res) => {
   try {
     // Check for existing session ID
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
@@ -407,10 +407,10 @@ const handleSessionRequest = async (
 };
 
 // Handle GET requests for server-to-client notifications via SSE
-app.get("/mcp", authMiddleware, handleSessionRequest);
+app.get("/mcp", handleSessionRequest);
 
 // Handle DELETE requests for session termination
-app.delete("/mcp", authMiddleware, handleSessionRequest);
+app.delete("/mcp", handleSessionRequest);
 
 // Webhook endpoint for repo updates
 
