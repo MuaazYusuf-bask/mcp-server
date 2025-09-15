@@ -302,6 +302,8 @@ function authMiddleware(
   next: express.NextFunction
 ) {
   const authHeader = req.headers["authorization"];
+  console.log("Request Headers:", req.headers);
+  console.log("Auth Header:", authHeader);
   if (!API_KEY || !authHeader || authHeader !== `Bearer ${API_KEY}`) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -309,21 +311,21 @@ function authMiddleware(
 }
 
 const app = express();
-// app.use(helmet());
-// app.use(
-//   cors({
-//     origin: process.env.CORS_ORIGIN || "*",
-//     methods: ["GET", "POST", "DELETE"],
-//     allowedHeaders: [
-//       "Content-Type",
-//       "Authorization",
-//       "MCP-Session-Id",
-//       "mcp-session-id",
-//     ],
-//     credentials: false,
-//   })
-// );
-// app.disable("x-powered-by");
+app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "*",
+    methods: ["GET", "POST", "DELETE"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "MCP-Session-Id",
+      "mcp-session-id",
+    ],
+    credentials: false,
+  })
+);
+app.disable("x-powered-by");
 app.use(express.json({ limit: "10mb" }));
 app.use(express.raw({ type: "application/json" }));
 
