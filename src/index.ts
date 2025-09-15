@@ -311,23 +311,23 @@ function authMiddleware(
 }
 
 const app = express();
-app.use(helmet());
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || "*",
-    methods: ["GET", "POST", "DELETE"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "MCP-Session-Id",
-      "mcp-session-id",
-    ],
-    credentials: false,
-  })
-);
-app.disable("x-powered-by");
-app.use(express.json({ limit: "10mb" }));
-app.use(express.raw({ type: "application/json" }));
+// app.use(helmet());
+// app.use(
+//   cors({
+//     origin: process.env.CORS_ORIGIN || "*",
+//     methods: ["GET", "POST", "DELETE"],
+//     allowedHeaders: [
+//       "Content-Type",
+//       "Authorization",
+//       "MCP-Session-Id",
+//       "mcp-session-id",
+//     ],
+//     credentials: false,
+//   })
+// );
+// app.disable("x-powered-by");
+// app.use(express.json({ limit: "10mb" }));
+// app.use(express.raw({ type: "application/json" }));
 
 const API_KEY = process.env.API_KEY;
 
